@@ -25,6 +25,7 @@ public class Example extends Application {
 	int CT_x_axis = 256;
     int CT_y_axis = 256;
 	int CT_z_axis = 113;
+	int VOLUME_DATA = 4;
 	private WritableImage topImage;
 
 	@Override
@@ -74,6 +75,13 @@ public class Example extends Application {
 				SideSlice(sideImage, newValue.intValue());
 			});
 
+		Button volumeBtn = new Button("Volume");
+		volumeBtn.setOnAction(
+				(ActionEvent e) -> {
+					FrontBackVolume(frontImage);
+				}
+		);
+
 		FlowPane root = new FlowPane();
 		root.setVgap(8);
         root.setHgap(4);
@@ -81,7 +89,7 @@ public class Example extends Application {
 
 		//3. (referring to the 3 things we need to display an image)
 		//we need to add it to the flow pane
-		root.getChildren().addAll(TopView, topSlider, FrontView, frontSlider, SideView, sideSlider);
+		root.getChildren().addAll(TopView, topSlider, FrontView, frontSlider, SideView, sideSlider, volumeBtn);
 
         Scene scene = new Scene(root, 640, 480);
         stage.setScene(scene);
@@ -120,6 +128,53 @@ public class Example extends Application {
 		//(i.e. there are 3366 levels of grey (we are trying to display on 256 levels of grey)
 		//therefore histogram equalization would be a good thing
 		//maybe put your histogram equalization code here to set up the mapping array
+	}
+
+	// Volume rendering for front back.
+	public void FrontBackVolume(WritableImage image) {
+		//Get image dimensions, and declare loop variables
+		int w=(int) image.getWidth(), h=(int) image.getHeight();
+		PixelWriter image_writer = image.getPixelWriter();
+
+		double col;
+		short datum;
+		double lightning = 1.0;
+		Double[][][] colours = new Double[h][w][VOLUME_DATA];
+		// Initialize array with [0, 0, 0, 1].
+		for (int k=0; k<CT_y_axis; k++){
+			for (int j=0; j<h; j++) {
+				for (int i=0; i<w; i++) {
+					for (int a = 0; a < VOLUME_DATA; a ++) {
+						colours[j][i][a] = 0.0;
+					}
+					colours[j][i][3] = 1.0;
+				}
+			}
+		}
+
+		for (int k=0; k<CT_y_axis; k++){
+			for (int j=0; j<h; j++) {
+				for (int i=0; i<w; i++) {
+					datum = cthead[j][k][i];
+					Double[] ans = transferFunction(datum);
+					for (int a = 0; a < VOLUME_DATA; a ++) {
+						// color * accum opacity * opacity * lighting
+						colours[j][i][a] += ans[a] * colours[j][i][3] * ans[3];
+					}
+					// Set accum opacity.
+					colours[j][i][3] *= (1 - ans[3]);
+					if (ans[3] == 1) {
+						break;
+					}
+				}
+			}
+		}
+		for (int j=0; j<h; j++) {
+			for (int i=0; i<w; i++) {
+				image_writer.setColor(i, j, Color.color(Math.min(1.0, colours[j][i][0]),Math.min(1.0, colours[j][i][1]),
+						Math.min(1.0, colours[j][i][2]), colours[j][i][3]));
+			}
+		}
 	}
 
 	
@@ -165,12 +220,9 @@ public class Example extends Application {
 		short datum;
 		for (int j=0; j<h; j++) {
 			for (int i=0; i<w; i++) {
-				datum=cthead[j][yIndex][i];
-				Double[] ans = transferFunction(datum);
-				image_writer.setColor(i, j, Color.color(ans[0], ans[1], ans[2], ans[3]));
-
-//				col=(((float)datum-(float)min)/((float)(max-min)));
-//				image_writer.setColor(i, j, Color.color(col,col,col, 1.0));
+				datum = cthead[j][yIndex][i];
+				col=(((float)datum-(float)min)/((float)(max-min)));
+				image_writer.setColor(i, j, Color.color(col,col,col, 1.0));
 			}
 		}
 	}
@@ -185,10 +237,10 @@ public class Example extends Application {
 		for (int j=0; j<h; j++) {
 			for (int i=0; i<w; i++) {
 				datum=cthead[j][i][xIndex];
-//				col=(((float)datum-(float)min)/((float)(max-min)));
-//				image_writer.setColor(i, j, Color.color(col, col, col, 1.0));
-				Double[] ans = transferFunction(datum);
-				image_writer.setColor(i, j, Color.color(ans[0], ans[1], ans[2], ans[3]));
+				col=(((float)datum-(float)min)/((float)(max-min)));
+				image_writer.setColor(i, j, Color.color(col, col, col, 1.0));
+//				Double[] ans = transferFunction(datum);
+//				image_writer.setColor(i, j, Color.color(ans[0], ans[1], ans[2], ans[3]));
 			}
 		}
 	}
