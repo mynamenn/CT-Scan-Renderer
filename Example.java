@@ -17,6 +17,7 @@ import javafx.scene.image.PixelWriter;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import java.io.*;
+import java.util.Arrays;
 
 
 public class Example extends Application {
@@ -77,9 +78,7 @@ public class Example extends Application {
 
 		Button volumeBtn = new Button("Volume");
 		volumeBtn.setOnAction(
-				(ActionEvent e) -> {
-					FrontBackVolume(frontImage);
-				}
+				(ActionEvent e) -> FrontBackVolume(frontImage)
 		);
 
 		FlowPane root = new FlowPane();
@@ -136,15 +135,13 @@ public class Example extends Application {
 		int w=(int) image.getWidth(), h=(int) image.getHeight();
 		PixelWriter image_writer = image.getPixelWriter();
 
-		double col;
 		short datum;
-		double lightning = 1.0;
-		Double[][][] colours = new Double[h][w][VOLUME_DATA];
+		Double[][][] colours = new Double[h][w][4];
 		// Initialize array with [0, 0, 0, 1].
 		for (int k=0; k<CT_y_axis; k++){
 			for (int j=0; j<h; j++) {
 				for (int i=0; i<w; i++) {
-					for (int a = 0; a < VOLUME_DATA; a ++) {
+					for (int a = 0; a < 3; a ++) {
 						colours[j][i][a] = 0.0;
 					}
 					colours[j][i][3] = 1.0;
@@ -156,23 +153,28 @@ public class Example extends Application {
 			for (int j=0; j<h; j++) {
 				for (int i=0; i<w; i++) {
 					datum = cthead[j][k][i];
-					Double[] ans = transferFunction(datum);
-					for (int a = 0; a < VOLUME_DATA; a ++) {
-						// color * accum opacity * opacity * lighting
-						colours[j][i][a] += ans[a] * colours[j][i][3] * ans[3];
-					}
-					// Set accum opacity.
-					colours[j][i][3] *= (1 - ans[3]);
-					if (ans[3] == 1) {
+					Double[] rgbValues = transferFunction(datum);
+					// [r, g, b, opacity]
+					if (rgbValues[3] == 1) {
 						break;
 					}
+					for (int a = 0; a < 3; a ++) {
+						// color * accumulated transparency * opacity
+						colours[j][i][a] += (rgbValues[a] * colours[j][i][3] * rgbValues[3]);
+					}
+					// Set accumulated transparency.
+					colours[j][i][3] *= (1 - rgbValues[3]);
 				}
 			}
 		}
 		for (int j=0; j<h; j++) {
 			for (int i=0; i<w; i++) {
-				image_writer.setColor(i, j, Color.color(Math.min(1.0, colours[j][i][0]),Math.min(1.0, colours[j][i][1]),
-						Math.min(1.0, colours[j][i][2]), colours[j][i][3]));
+				image_writer.setColor(i, j, Color.color(
+						Math.min(1.0, colours[j][i][0]),
+						Math.min(1.0, colours[j][i][1]),
+						Math.min(1.0, colours[j][i][2]),
+						1.0
+				));
 			}
 		}
 	}
@@ -247,18 +249,22 @@ public class Example extends Application {
 
 	public Double[] transferFunction(double ctVal) {
 		Double[] ans;
-		double col = (((float)ctVal-(float)min)/((float)(max-min)));
-		if (ctVal < -300) {
+//		System.out.println("CT VALUE: " + ctVal);
+		if (ctVal < -300.0) {
 			ans = new Double[]{0.0, 0.0, 0.0, 0.0};
+//			System.out.println(Arrays.toString(ans));
 			return ans;
-		} else if (ctVal >= -300 && ctVal <= 49) {
+		} else if (ctVal >= -300.0 && ctVal <= 49.0) {
 			ans = new Double[]{1.0, 0.79, 0.6, 0.12};
+//			System.out.println(Arrays.toString(ans));
 			return ans;
-		} else if (ctVal >= 50 && ctVal <= 299) {
+		} else if (ctVal >= 50.0 && ctVal <= 299.0) {
 			ans = new Double[]{0.0, 0.0, 0.0, 0.0};
+//			System.out.println(Arrays.toString(ans));
 			return ans;
 		} else {
 			ans = new Double[]{1.0, 1.0, 1.0, 0.8};
+//			System.out.println(Arrays.toString(ans));
 			return ans;
 		}
 	}
