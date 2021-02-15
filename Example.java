@@ -17,7 +17,6 @@ import javafx.scene.image.PixelWriter;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import java.io.*;
-import java.util.Arrays;
 
 
 public class Example extends Application {
@@ -26,8 +25,8 @@ public class Example extends Application {
 	int CT_x_axis = 256;
     int CT_y_axis = 256;
 	int CT_z_axis = 113;
-	int VOLUME_DATA = 4;
 	private WritableImage topImage;
+	private double skinOpacity = 0;
 
 	@Override
     public void start(Stage stage) throws FileNotFoundException, IOException {
@@ -35,12 +34,9 @@ public class Example extends Application {
 
 		ReadData();
 
-		//Good practice: Define your top view, front view and side view images (get the height and width correct)
-		//Here's the top view - looking down on the top of the head (each slice we are looking at is CT_x_axis x CT_y_axis)
 		int Top_width = CT_x_axis;
 		int Top_height = CT_y_axis;
 		
-		//Here's the front view - looking at the front (nose) of the head (each slice we are looking at is CT_x_axis x CT_z_axis)
 		int Front_width = CT_x_axis;
 		int Front_height = CT_z_axis;
 		
@@ -53,13 +49,14 @@ public class Example extends Application {
 		WritableImage frontImage = new WritableImage(Front_width, Front_height);
 		ImageView FrontView = new ImageView(frontImage);
 
-		WritableImage sideImage = new WritableImage(Front_width, Front_height);
+		WritableImage sideImage = new WritableImage(Side_width, Side_height);
 		ImageView SideView = new ImageView(sideImage);
 
 		//sliders to step through the slices (top and front directions) (remember 113 slices in top direction 0-112)
 		Slider topSlider = new Slider(0, CT_z_axis-1, 0);
 		Slider frontSlider = new Slider(0, CT_y_axis-1, 0);
 		Slider sideSlider = new Slider(0, CT_x_axis-1, 0);
+		Slider opacitySlider = new Slider(0, 100, 0);
 
 		topSlider.valueProperty().addListener(
 			(observable, oldValue, newValue) -> {
@@ -76,24 +73,98 @@ public class Example extends Application {
 				SideSlice(sideImage, newValue.intValue());
 			});
 
-		Button volumeBtn = new Button("Volume");
+		opacitySlider.valueProperty().addListener(
+				(observable, oldValue, newValue) -> {
+					skinOpacity = newValue.intValue() / 100.0;
+//					renderVolumes(frontImage, sideImage, topImage);
+				});
+
+		Button volumeBtn = new Button("volrend");
 		volumeBtn.setOnAction(
-				(ActionEvent e) -> FrontBackVolume(frontImage)
+				(ActionEvent e) -> {
+					renderVolumes(frontImage, sideImage, topImage);
+				}
+		);
+
+		Button gradientBtn = new Button("gradient");
+		gradientBtn.setOnAction(
+				(ActionEvent e) -> {
+					renderGradients(frontImage, sideImage, topImage);
+				}
 		);
 
 		FlowPane root = new FlowPane();
 		root.setVgap(8);
         root.setHgap(4);
-		//https://examples.javacodegeeks.com/desktop-java/javafx/scene/image-scene/javafx-image-example/
 
-		//3. (referring to the 3 things we need to display an image)
-		//we need to add it to the flow pane
-		root.getChildren().addAll(TopView, topSlider, FrontView, frontSlider, SideView, sideSlider, volumeBtn);
+		root.getChildren().addAll(TopView, topSlider, FrontView, frontSlider, SideView, sideSlider, gradientBtn, volumeBtn, opacitySlider);
 
         Scene scene = new Scene(root, 640, 480);
         stage.setScene(scene);
         stage.show();
     }
+
+	public void renderGradients(WritableImage frontImage, WritableImage sideImage, WritableImage topImage) {
+		FrontGradient(frontImage);
+	}
+
+	public void FrontGradient(WritableImage image) {
+		//Get image dimensions, and declare loop variables.
+		int w=(int) image.getWidth(), h=(int) image.getHeight();
+		PixelWriter image_writer = image.getPixelWriter();
+
+		double col;
+		// Left right, front back, up down.
+		double[] vector = new double[]{-10.0, -20.0, -10.0}; // Vector of light source.
+		// Light is at top right shining north-west.
+		double x = CT_x_axis;
+		double y = 0.0; // Most front layer.
+		double z = 0.0; // At the top.
+
+		int step = 5; // Step backwards 10 steps to calculate gradient.
+
+		int[][] arr = new int[h][w];
+		// Find all the k position where ray hits bone.
+		for (int j = 0; j < h; j++) {
+			for (int i = step; i < w; i++) {
+				int k = 0;
+				// Iterate from front to back until it reaches a bone.
+				while(cthead[j][k][i] <= 400 && k < CT_y_axis - 1) {
+					k += 1;
+				}
+				arr[j][i] = k;
+			}
+		}
+		for (int j = 0; j < h; j++) {
+			for (int i = 0; i < w; i++) {
+				int k = arr[j][i];
+				// Either forward step or backward step depending on i.
+				int k2 = (i < step) ? arr[j][i + step] : arr[j][i - step];
+
+				col = 1.0 - k/255.0;
+				// Vector of normal (x, y, z)
+				double[] lineVector = new double[]{step, k-k2, 0.0};
+				double solvedX = ((k-k2)*1.0) / step;
+				double[] normVector = new double[]{solvedX, 1.0, 10.0};
+				double cosTheta = 0.0;
+				for (int index = 0; index < 3; index++) {
+					cosTheta += vector[index] * normVector[index];
+				}
+				cosTheta /= Math.sqrt(Math.pow(normVector[0],2) + Math.pow(normVector[1],2) + Math.pow(normVector[2],2));
+				cosTheta /= Math.sqrt(Math.pow(vector[0],2) + Math.pow(vector[1],2) + Math.pow(vector[2],2));
+				if (cosTheta < 0) {
+					cosTheta = 0;
+				}
+				image_writer.setColor(i, j, Color.color(col * cosTheta, col * cosTheta, col * cosTheta, 1.0));
+			}
+		}
+	}
+
+    public void renderVolumes(WritableImage frontImage, WritableImage sideImage, WritableImage topImage) {
+		FrontVolume(frontImage);
+		SideVolume(sideImage);
+		TopVolume(topImage);
+	}
 	
 	//Function to read in the cthead data set
 	public void ReadData() throws IOException {
@@ -123,69 +194,9 @@ public class Example extends Application {
 				}
 			}
 		}
-		System.out.println(min+" "+max); //diagnostic - for CThead this should be -1117, 2248
-		//(i.e. there are 3366 levels of grey (we are trying to display on 256 levels of grey)
-		//therefore histogram equalization would be a good thing
-		//maybe put your histogram equalization code here to set up the mapping array
+		System.out.println(min+" "+max);
 	}
 
-	// Volume rendering for front back.
-	public void FrontBackVolume(WritableImage image) {
-		//Get image dimensions, and declare loop variables
-		int w=(int) image.getWidth(), h=(int) image.getHeight();
-		PixelWriter image_writer = image.getPixelWriter();
-
-		short datum;
-		Double[][][] colours = new Double[h][w][4];
-		// Initialize array with [0, 0, 0, 1].
-		for (int k=0; k<CT_y_axis; k++){
-			for (int j=0; j<h; j++) {
-				for (int i=0; i<w; i++) {
-					for (int a = 0; a < 3; a ++) {
-						colours[j][i][a] = 0.0;
-					}
-					colours[j][i][3] = 1.0;
-				}
-			}
-		}
-
-		for (int k=0; k<CT_y_axis; k++){
-			for (int j=0; j<h; j++) {
-				for (int i=0; i<w; i++) {
-					datum = cthead[j][k][i];
-					Double[] rgbValues = transferFunction(datum);
-					// [r, g, b, opacity]
-					if (rgbValues[3] == 1) {
-						break;
-					}
-					for (int a = 0; a < 3; a ++) {
-						// color * accumulated transparency * opacity
-						colours[j][i][a] += (rgbValues[a] * colours[j][i][3] * rgbValues[3]);
-					}
-					// Set accumulated transparency.
-					colours[j][i][3] *= (1 - rgbValues[3]);
-				}
-			}
-		}
-		for (int j=0; j<h; j++) {
-			for (int i=0; i<w; i++) {
-				image_writer.setColor(i, j, Color.color(
-						Math.min(1.0, colours[j][i][0]),
-						Math.min(1.0, colours[j][i][1]),
-						Math.min(1.0, colours[j][i][2]),
-						1.0
-				));
-			}
-		}
-	}
-
-	
-	 /*
-        This function shows how to carry out an operation on an image.
-        It obtains the dimensions of the image, and then loops through
-        the image carrying out the copying of a slice of data into the
-		image.
-    */
 	public void TopDownSlice(WritableImage image, int zIndex) {
 		//Get image dimensions, and declare loop variables
 		int w=(int) image.getWidth(), h=(int) image.getHeight();
@@ -193,20 +204,9 @@ public class Example extends Application {
 
 		double col;
 		short datum;
-		//Shows how to loop through each pixel and colour
-		//Try to always use j for loops in y, and i for loops in x
-		//as this makes the code more readable
 		for (int j=0; j<h; j++) {
 				for (int i=0; i<w; i++) {
-						//at this point (i,j) is a single pixel in the image
-						//here you would need to do something to (i,j) if the image size
-						//does not match the slice size (e.g. during an image resizing operation
-						//If you don't do this, your j,i could be outside the array bounds
-						//In the framework, the image is 256x256 and the data set slices are 256x256
-						//so I don't do anything - this also leaves you something to do for the assignment
 						datum=cthead[zIndex][j][i]; //get values from slice 76 (change this in your assignment)
-						//calculate the colour by performing a mapping from [min,max] -> 0 to 1 (float)
-						//Java setColor uses float values from 0 to 1 rather than 0-255 bytes for colour
 						col=(((float)datum-(float)min)/((float)(max-min)));
 						image_writer.setColor(i, j, Color.color(col,col,col, 1.0));
 				}
@@ -241,32 +241,144 @@ public class Example extends Application {
 				datum=cthead[j][i][xIndex];
 				col=(((float)datum-(float)min)/((float)(max-min)));
 				image_writer.setColor(i, j, Color.color(col, col, col, 1.0));
-//				Double[] ans = transferFunction(datum);
-//				image_writer.setColor(i, j, Color.color(ans[0], ans[1], ans[2], ans[3]));
 			}
 		}
 	}
 
 	public Double[] transferFunction(double ctVal) {
 		Double[] ans;
-//		System.out.println("CT VALUE: " + ctVal);
 		if (ctVal < -300.0) {
 			ans = new Double[]{0.0, 0.0, 0.0, 0.0};
-//			System.out.println(Arrays.toString(ans));
 			return ans;
 		} else if (ctVal >= -300.0 && ctVal <= 49.0) {
 			ans = new Double[]{1.0, 0.79, 0.6, 0.12};
-//			System.out.println(Arrays.toString(ans));
 			return ans;
 		} else if (ctVal >= 50.0 && ctVal <= 299.0) {
-			ans = new Double[]{0.0, 0.0, 0.0, 0.0};
-//			System.out.println(Arrays.toString(ans));
+			ans = new Double[]{0.0, 0.0, 0.0, skinOpacity};
 			return ans;
 		} else {
 			ans = new Double[]{1.0, 1.0, 1.0, 0.8};
-//			System.out.println(Arrays.toString(ans));
 			return ans;
 		}
+	}
+
+	public Double[][][] initializeColours(int h, int w) {
+		Double[][][] colours = new Double[h][w][4];
+		// Initialize array with [0, 0, 0, 1].
+		for (int k=0; k<CT_y_axis; k++){
+			for (int j=0; j<h; j++) {
+				for (int i=0; i<w; i++) {
+					for (int a = 0; a < 3; a ++) {
+						colours[j][i][a] = 0.0;
+					}
+					colours[j][i][3] = 1.0;
+				}
+			}
+		}
+		return colours;
+	}
+
+	public void setImageWriter(PixelWriter image_writer, int h, int w, Double[][][] colours) {
+		for (int j=0; j<h; j++) {
+			for (int i=0; i<w; i++) {
+				image_writer.setColor(i, j, Color.color(
+						Math.min(1.0, colours[j][i][0]),
+						Math.min(1.0, colours[j][i][1]),
+						Math.min(1.0, colours[j][i][2]),
+						1.0
+				));
+			}
+		}
+	}
+
+	// Volume rendering for top down.
+	public void SideVolume(WritableImage image) {
+		//Get image dimensions, and declare loop variables
+		int w=(int) image.getWidth(), h=(int) image.getHeight();
+		PixelWriter image_writer = image.getPixelWriter();
+
+		short datum;
+		Double[][][] colours = initializeColours(h, w);
+
+		for (int k=0; k<CT_x_axis; k++){
+			for (int j=0; j<h; j++) {
+				for (int i=0; i<w; i++) {
+					datum = cthead[j][i][k];
+					Double[] rgbValues = transferFunction(datum);
+					// [r, g, b, opacity]
+					if (rgbValues[3] == 1) {
+						break;
+					}
+					for (int a = 0; a < 3; a ++) {
+						// color * accumulated transparency * opacity
+						colours[j][i][a] += (rgbValues[a] * colours[j][i][3] * rgbValues[3]);
+					}
+					// Set accumulated transparency.
+					colours[j][i][3] *= (1 - rgbValues[3]);
+				}
+			}
+		}
+		setImageWriter(image_writer, h, w, colours);
+	}
+
+	// Volume rendering for top down.
+	public void TopVolume(WritableImage image) {
+		//Get image dimensions, and declare loop variables
+		int w=(int) image.getWidth(), h=(int) image.getHeight();
+		PixelWriter image_writer = image.getPixelWriter();
+
+		short datum;
+		Double[][][] colours = initializeColours(h, w);
+
+		for (int k=0; k<CT_z_axis; k++){
+			for (int j=0; j<h; j++) {
+				for (int i=0; i<w; i++) {
+					datum = cthead[k][j][i];
+					Double[] rgbValues = transferFunction(datum);
+					// [r, g, b, opacity]
+					if (rgbValues[3] == 1) {
+						break;
+					}
+					for (int a = 0; a < 3; a ++) {
+						// color * accumulated transparency * opacity
+						colours[j][i][a] += (rgbValues[a] * colours[j][i][3] * rgbValues[3]);
+					}
+					// Set accumulated transparency.
+					colours[j][i][3] *= (1 - rgbValues[3]);
+				}
+			}
+		}
+		setImageWriter(image_writer, h, w, colours);
+	}
+
+	// Volume rendering for front back.
+	public void FrontVolume(WritableImage image) {
+		//Get image dimensions, and declare loop variables
+		int w=(int) image.getWidth(), h=(int) image.getHeight();
+		PixelWriter image_writer = image.getPixelWriter();
+
+		short datum;
+		Double[][][] colours = initializeColours(h, w);
+
+		for (int k=0; k<CT_y_axis; k++){
+			for (int j=0; j<h; j++) {
+				for (int i=0; i<w; i++) {
+					datum = cthead[j][k][i];
+					Double[] rgbValues = transferFunction(datum);
+					// [r, g, b, opacity]
+					if (rgbValues[3] == 1) {
+						break;
+					}
+					for (int a = 0; a < 3; a ++) {
+						// color * accumulated transparency * opacity
+						colours[j][i][a] += (rgbValues[a] * colours[j][i][3] * rgbValues[3]);
+					}
+					// Set accumulated transparency.
+					colours[j][i][3] *= (1 - rgbValues[3]);
+				}
+			}
+		}
+		setImageWriter(image_writer, h, w, colours);
 	}
 
     public static void main(String[] args) {
