@@ -115,13 +115,13 @@ public class Example extends Application {
 
 		double col;
 		// Left right, front back, up down.
-		double[] vector = new double[]{-10.0, -20.0, -10.0}; // Vector of light source.
+		double[] vector = new double[]{100.0, -100.0, -10.0}; // Vector of light source.
 		// Light is at top right shining north-west.
 		double x = CT_x_axis;
 		double y = 0.0; // Most front layer.
 		double z = 0.0; // At the top.
 
-		int step = 5; // Step backwards 10 steps to calculate gradient.
+		int step = 10; // Step backwards 10 steps to calculate gradient.
 
 		int[][] arr = new int[h][w];
 		// Find all the k position where ray hits bone.
@@ -135,27 +135,31 @@ public class Example extends Application {
 				arr[j][i] = k;
 			}
 		}
+
 		for (int j = 0; j < h; j++) {
 			for (int i = 0; i < w; i++) {
 				int k = arr[j][i];
 				// Either forward step or backward step depending on i.
 				int k2 = (i < step) ? arr[j][i + step] : arr[j][i - step];
-
 				col = 1.0 - k/255.0;
 				// Vector of normal (x, y, z)
 				double[] lineVector = new double[]{step, k-k2, 0.0};
-				double solvedX = ((k-k2)*1.0) / step;
-				double[] normVector = new double[]{solvedX, 1.0, 10.0};
+				double[] normVector = new double[]{k-k2, -1*step, 0.0}; // Flip x and y, then multiply by -1.
 				double cosTheta = 0.0;
+
+				// Dot product of light and normal vector.
 				for (int index = 0; index < 3; index++) {
 					cosTheta += vector[index] * normVector[index];
 				}
 				cosTheta /= Math.sqrt(Math.pow(normVector[0],2) + Math.pow(normVector[1],2) + Math.pow(normVector[2],2));
 				cosTheta /= Math.sqrt(Math.pow(vector[0],2) + Math.pow(vector[1],2) + Math.pow(vector[2],2));
+
+				// Light is at the back, thus pixel can't be seen.
 				if (cosTheta < 0) {
 					cosTheta = 0;
 				}
-				image_writer.setColor(i, j, Color.color(col * cosTheta, col * cosTheta, col * cosTheta, 1.0));
+				col *= cosTheta;
+				image_writer.setColor(i, j, Color.color(col, col, col, 1.0));
 			}
 		}
 	}
