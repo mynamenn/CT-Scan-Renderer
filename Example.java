@@ -113,20 +113,19 @@ public class Example extends Application {
 		int w=(int) image.getWidth(), h=(int) image.getHeight();
 		PixelWriter image_writer = image.getPixelWriter();
 
-		double col;
 		// Left right, front back, up down.
-		double[] vector = new double[]{100.0, -100.0, -10.0}; // Vector of light source.
+		double[] lightPos = new double[]{255, 0, 100}; // Coordinates of light.
 		// Light is at top right shining north-west.
 		double x = CT_x_axis;
 		double y = 0.0; // Most front layer.
 		double z = 0.0; // At the top.
 
-		int step = 10; // Step backwards 10 steps to calculate gradient.
+		int step = 2;
 
 		int[][] arr = new int[h][w];
 		// Find all the k position where ray hits bone.
 		for (int j = 0; j < h; j++) {
-			for (int i = step; i < w; i++) {
+			for (int i = 0; i < w; i++) {
 				int k = 0;
 				// Iterate from front to back until it reaches a bone.
 				while(cthead[j][k][i] <= 400 && k < CT_y_axis - 1) {
@@ -138,28 +137,39 @@ public class Example extends Application {
 
 		for (int j = 0; j < h; j++) {
 			for (int i = 0; i < w; i++) {
-				int k = arr[j][i];
-				// Either forward step or backward step depending on i.
-				int k2 = (i < step) ? arr[j][i + step] : arr[j][i - step];
-				col = 1.0 - k/255.0;
-				// Vector of normal (x, y, z)
-				double[] lineVector = new double[]{step, k-k2, 0.0};
-				double[] normVector = new double[]{k-k2, -1*step, 0.0}; // Flip x and y, then multiply by -1.
-				double cosTheta = 0.0;
+				int k;
+				int k2;
+				// Forward difference
+				if (i < 1) {
+					k = arr[j][i];
+					k2 = arr[j][i+2];
+				} else if (i == w-1) {
+					// Backward difference
+					k = arr[j][i-2];
+					k2 = arr[j][i];
+				} else {
+					// Central difference
+					k = arr[j][i-1];
+					k2 = arr[j][i+1];
+				}
 
+				double[] lineVector = new double[]{step, k2-k, 0.0};
+				double[] lightVector = new double[]{lightPos[0] - i + 1, lightPos[1] - j + 1, lightPos[2] - arr[j][i]};
+				double lineLength = Math.sqrt(Math.pow(lineVector[0],2) + Math.pow(lineVector[1],2) + Math.pow(lineVector[2],2));
+				double lightLength = Math.sqrt(Math.pow(lightVector[0],2) + Math.pow(lightVector[1],2) + Math.pow(lightVector[2],2));
+
+				double cosTheta = 0.0;
 				// Dot product of light and normal vector.
 				for (int index = 0; index < 3; index++) {
-					cosTheta += vector[index] * normVector[index];
+					cosTheta += lightVector[index] * lineVector[index] / (lightLength * lineLength);
 				}
-				cosTheta /= Math.sqrt(Math.pow(normVector[0],2) + Math.pow(normVector[1],2) + Math.pow(normVector[2],2));
-				cosTheta /= Math.sqrt(Math.pow(vector[0],2) + Math.pow(vector[1],2) + Math.pow(vector[2],2));
-
 				// Light is at the back, thus pixel can't be seen.
 				if (cosTheta < 0) {
 					cosTheta = 0;
 				}
-				col *= cosTheta;
-				image_writer.setColor(i, j, Color.color(col, col, col, 1.0));
+
+				double color = (1.0 - k/255.0) * cosTheta;
+				image_writer.setColor(i, j, Color.color(color, color, color, 1.0));
 			}
 		}
 	}
@@ -338,6 +348,89 @@ public class Example extends Application {
 			for (int j=0; j<h; j++) {
 				for (int i=0; i<w; i++) {
 					datum = cthead[k][j][i];
+					Double[] rgbValues = transferFunction(datum);
+					// [r, g, b, opacity]
+					if (rgbValues[3] == 1) {
+						break;
+					}
+					// Set rgb values in array.
+					for (int a = 0; a < 3; a ++) {
+						// color * accumulated transparency * opacity
+						colours[j][i][a] += (rgbValues[a] * colours[j][i][3] * rgbValues[3]);
+					}
+					// Set accumulated transparency.
+					colours[j][i][3] *= (1 - rgbValues[3]);
+				}
+			}
+		}
+		setImageWriter(image_writer, h, w, colours);
+	}
+
+	public short[][][] rotateData() {
+		short[][][] data = new short[CT_z_axis][CT_y_axis][CT_x_axis];
+		double angle = Math.toRadians(45);
+		double[][] transform = new double[3][3];
+		for (int j=0; j<3; j++) {
+			for (int i=0; i<3; i++) {
+				transform[j][i] = 0;
+				if (i == 2 && j == 2) {
+					transform[j][i] = 1;
+				} else if (j == 0 && i == 0) {
+					transform[j][i] = Math.cos(angle);
+				} else if (j == 0 && i == 1) {
+					transform[j][i] = -1 * Math.sin(angle);
+				} else if (j == 1 && i == 0) {
+					transform[j][i] = Math.sin(angle);
+				} else if (j == 1 && i == 1) {
+					transform[j][i] = Math.cos(angle);
+				}
+			}
+		}
+		// Shift each voxel to its transformed index.
+		for (int k=0; k<CT_z_axis; k++){
+			for (int j=0; j<CT_y_axis; j++) {
+				for (int i=0; i<CT_x_axis; i++) {
+					int zIndex = 0;
+					int yIndex = 0;
+					int xIndex = 0;
+					for (int a=0; a<3; a++) {
+						if (a == 0) {
+							for (int b = 0; b < 3; b++) {
+								xIndex += i * transform[a][b];
+							}
+						} else if (a == 1) {
+							for (int b = 0; b < 3; b++) {
+								yIndex += j * transform[a][b];
+							}
+						} else {
+							for (int b = 0; b < 3; b++) {
+								zIndex += k * transform[a][b];
+							}
+						}
+					}
+					data[Math.min(zIndex, 112)][Math.min(yIndex, 255)][Math.min(xIndex, 255)] = cthead[k][j][i];
+				}
+			}
+		}
+
+		return data;
+	}
+
+	// Volume rendering for front back.
+	public void FrontRotate(WritableImage image) {
+		//Get image dimensions, and declare loop variables
+		int w=(int) image.getWidth(), h=(int) image.getHeight();
+		PixelWriter image_writer = image.getPixelWriter();
+
+		short datum;
+		Double[][][] colours = initializeColours(h, w);
+
+		short[][][] newData = rotateData();
+
+		for (int k=0; k<CT_y_axis; k++){
+			for (int j=0; j<h; j++) {
+				for (int i=0; i<w; i++) {
+					datum = newData[j][k][i];
 					Double[] rgbValues = transferFunction(datum);
 					// [r, g, b, opacity]
 					if (rgbValues[3] == 1) {
