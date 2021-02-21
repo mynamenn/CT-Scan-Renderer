@@ -17,6 +17,7 @@ import javafx.scene.image.PixelWriter;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import java.io.*;
+import java.util.Arrays;
 
 
 public class Example extends Application {
@@ -52,6 +53,9 @@ public class Example extends Application {
 		WritableImage sideImage = new WritableImage(Side_width, Side_height);
 		ImageView SideView = new ImageView(sideImage);
 
+		WritableImage frontExpandedImage = new WritableImage((Front_width-1)*2 + 1, Front_height);
+		ImageView FrontExpandedView = new ImageView(frontExpandedImage);
+
 		//sliders to step through the slices (top and front directions) (remember 113 slices in top direction 0-112)
 		Slider topSlider = new Slider(0, CT_z_axis-1, 0);
 		Slider frontSlider = new Slider(0, CT_y_axis-1, 0);
@@ -76,7 +80,7 @@ public class Example extends Application {
 		opacitySlider.valueProperty().addListener(
 				(observable, oldValue, newValue) -> {
 					skinOpacity = newValue.intValue() / 100.0;
-//					renderVolumes(frontImage, sideImage, topImage);
+					renderVolumes(frontImage, sideImage, topImage);
 				});
 
 		Button volumeBtn = new Button("volrend");
@@ -89,7 +93,7 @@ public class Example extends Application {
 		Button gradientBtn = new Button("gradient");
 		gradientBtn.setOnAction(
 				(ActionEvent e) -> {
-					renderGradients(frontImage, sideImage, topImage);
+					renderGradients(frontExpandedImage, sideImage, topImage);
 				}
 		);
 
@@ -97,7 +101,7 @@ public class Example extends Application {
 		root.setVgap(8);
         root.setHgap(4);
 
-		root.getChildren().addAll(TopView, topSlider, FrontView, frontSlider, SideView, sideSlider, gradientBtn, volumeBtn, opacitySlider);
+		root.getChildren().addAll(TopView, topSlider, FrontView, frontSlider, SideView, sideSlider, opacitySlider, FrontExpandedView, gradientBtn, volumeBtn);
 
         Scene scene = new Scene(root, 640, 480);
         stage.setScene(scene);
@@ -105,7 +109,7 @@ public class Example extends Application {
     }
 
 	public void renderGradients(WritableImage frontImage, WritableImage sideImage, WritableImage topImage) {
-		FrontGradient(frontImage);
+		FrontRotate(frontImage);
 	}
 
 	public void FrontGradient(WritableImage image) {
@@ -279,16 +283,15 @@ public class Example extends Application {
 	public Double[][][] initializeColours(int h, int w) {
 		Double[][][] colours = new Double[h][w][4];
 		// Initialize array with [0, 0, 0, 1].
-		for (int k=0; k<CT_y_axis; k++){
-			for (int j=0; j<h; j++) {
-				for (int i=0; i<w; i++) {
-					for (int a = 0; a < 3; a ++) {
-						colours[j][i][a] = 0.0;
-					}
-					colours[j][i][3] = 1.0;
+		for (int j=0; j<h; j++) {
+			for (int i=0; i<w; i++) {
+				for (int a = 0; a < 3; a ++) {
+					colours[j][i][a] = 0.0;
 				}
+				colours[j][i][3] = 1.0;
 			}
 		}
+
 		return colours;
 	}
 
@@ -367,22 +370,51 @@ public class Example extends Application {
 	}
 
 	public short[][][] rotateData() {
-		short[][][] data = new short[CT_z_axis][CT_y_axis][CT_x_axis];
-		double angle = Math.toRadians(45);
+		// Make a larger size as 45 degrees takes up the most space.
+		int largeX = (CT_x_axis-1)*2+1;
+		int largeY = (CT_y_axis-1)*2+1;
+		int largeZ = (CT_z_axis-1)*2+1;
+		short[][][] newData = new short[largeZ][largeY][largeX];
+
+		int xShift = 0;
+		int yShift = 0;
+		double angle = 360;
+		double radians = Math.toRadians(angle);
+		if (angle >= 0 && angle <= 90 && angle < 270 && angle <= 360) {
+			xShift = CT_x_axis - 1;
+			yShift = 0;
+		} else if (angle > 90 && angle <= 180) {
+			xShift = 360;
+			yShift = CT_y_axis - 1;
+		} else if (angle > 180 && angle <= 270) {
+			xShift = CT_x_axis - 1;
+			yShift = 360;
+		}
+
+		// Initialise all values of newData with -999.
+		for (int k=0; k<CT_z_axis; k++) {
+			for (int j=0; j<largeY; j++) {
+				for (int i=0; i<largeX; i++) {
+					newData[k][j][i] = -999;
+				}
+			}
+		}
+
 		double[][] transform = new double[3][3];
+		// Build transform matrix.
 		for (int j=0; j<3; j++) {
 			for (int i=0; i<3; i++) {
 				transform[j][i] = 0;
-				if (i == 2 && j == 2) {
-					transform[j][i] = 1;
-				} else if (j == 0 && i == 0) {
-					transform[j][i] = Math.cos(angle);
+				if (j == 0 && i == 0) {
+					transform[j][i] = Math.cos(radians);
 				} else if (j == 0 && i == 1) {
-					transform[j][i] = -1 * Math.sin(angle);
+					transform[j][i] = -1 * Math.sin(radians);
 				} else if (j == 1 && i == 0) {
-					transform[j][i] = Math.sin(angle);
+					transform[j][i] = Math.sin(radians);
 				} else if (j == 1 && i == 1) {
-					transform[j][i] = Math.cos(angle);
+					transform[j][i] = Math.cos(radians);
+				} else if (j == 2 && i == 2) {
+					transform[j][i] = 1;
 				}
 			}
 		}
@@ -390,30 +422,35 @@ public class Example extends Application {
 		for (int k=0; k<CT_z_axis; k++){
 			for (int j=0; j<CT_y_axis; j++) {
 				for (int i=0; i<CT_x_axis; i++) {
+					// Result of dot product.
 					int zIndex = 0;
 					int yIndex = 0;
 					int xIndex = 0;
+					int[] coordinates = new int[]{i, j, k};
+					// Product of transform matrix and coordinates matrix.
 					for (int a=0; a<3; a++) {
 						if (a == 0) {
 							for (int b = 0; b < 3; b++) {
-								xIndex += i * transform[a][b];
+								xIndex += coordinates[b] * transform[a][b];
 							}
 						} else if (a == 1) {
 							for (int b = 0; b < 3; b++) {
-								yIndex += j * transform[a][b];
+								yIndex += coordinates[b] * transform[a][b];
 							}
 						} else {
 							for (int b = 0; b < 3; b++) {
-								zIndex += k * transform[a][b];
+								zIndex += coordinates[b] * transform[a][b];
 							}
 						}
 					}
-					data[Math.min(zIndex, 112)][Math.min(yIndex, 255)][Math.min(xIndex, 255)] = cthead[k][j][i];
+//					System.out.println(i + " " + j + " " + k);
+//					System.out.println("New: " + xIndex + " " + yIndex + " " + zIndex);
+					// Map transformed index to data at original index.
+					newData[zIndex][yIndex + yShift][xIndex + xShift] = cthead[k][j][i];
 				}
 			}
 		}
-
-		return data;
+		return newData;
 	}
 
 	// Volume rendering for front back.
@@ -427,7 +464,7 @@ public class Example extends Application {
 
 		short[][][] newData = rotateData();
 
-		for (int k=0; k<CT_y_axis; k++){
+		for (int k=0; k<(CT_y_axis - 1)*2 + 1; k++){
 			for (int j=0; j<h; j++) {
 				for (int i=0; i<w; i++) {
 					datum = newData[j][k][i];
