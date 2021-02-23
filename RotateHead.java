@@ -9,35 +9,7 @@ public class RotateHead extends Main {
         this.cthead = cthead;
     }
 
-    public short[][][] rotateData(double angle) {
-        // Make a larger size as 45 degrees takes up the most space.
-        int largeX = (CT_x_axis-1)*2+1;
-        int largeY = (CT_y_axis-1)*2+1;
-        int largeZ = (CT_z_axis-1)*2+1;
-        short[][][] newData = new short[largeZ][largeY][largeX];
-        int xShift = 0;
-        int yShift = 0;
-        double radians = Math.toRadians(angle);
-        if (angle >= 0 && angle <= 90 && angle < 270 && angle <= 360) {
-            xShift = CT_x_axis - 1;
-            yShift = 0;
-        } else if (angle > 90 && angle <= 180) {
-            xShift = 360;
-            yShift = CT_y_axis - 1;
-        } else if (angle > 180 && angle <= 270) {
-            xShift = CT_x_axis - 1;
-            yShift = 360;
-        }
-
-        // Initialise all values of newData with -999.
-        for (int k=0; k<CT_z_axis; k++) {
-            for (int j=0; j<largeY; j++) {
-                for (int i=0; i<largeX; i++) {
-                    newData[k][j][i] = -999;
-                }
-            }
-        }
-
+    public double[][] transformMatrix(double radians) {
         double[][] transform = new double[3][3];
         // Build transform matrix.
         for (int j=0; j<3; j++) {
@@ -56,6 +28,45 @@ public class RotateHead extends Main {
                 }
             }
         }
+        return transform;
+    }
+
+    public short[][][] rotateData(double angle) {
+        // Make a larger size as 45 degrees takes up the most space.
+        int largeX = (CT_x_axis-1)*2+1;
+        int largeY = (CT_y_axis-1)*2+1;
+        int largeZ = (CT_z_axis-1)*2+1;
+        short[][][] newData = new short[largeZ][largeY][largeX];
+        int xShift = 0;
+        int yShift = 0;
+        double radians = Math.toRadians(angle);
+        System.out.println("Angle of rotation: " + angle);
+        if (angle >= 0 && angle <= 90) {
+            xShift = CT_x_axis - 1;
+            yShift = 0;
+        } else if (angle > 90 && angle <= 180) {
+            xShift = 360;
+            yShift = CT_y_axis - 1;
+        } else if (angle > 180 && angle <= 270) {
+            xShift = CT_x_axis - 1;
+            yShift = 360;
+        } else if (angle > 270 && angle <= 360) {
+            xShift = 0;
+            yShift = CT_y_axis - 1;
+        }
+
+        // Initialise all values of newData with -999.
+        for (int k=0; k<CT_z_axis; k++) {
+            for (int j=0; j<largeY; j++) {
+                for (int i=0; i<largeX; i++) {
+                    newData[k][j][i] = -999;
+                }
+            }
+        }
+
+        // Build transform matrix.
+        double[][] transform = transformMatrix(radians);
+
         // Shift each voxel to its transformed index.
         for (int k=0; k<CT_z_axis; k++){
             for (int j=0; j<CT_y_axis; j++) {
@@ -106,6 +117,70 @@ public class RotateHead extends Main {
             for (int j=0; j<h; j++) {
                 for (int i=0; i<w; i++) {
                     datum = newData[j][k][i];
+                    Double[] rgbValues = transferFunction(datum, 0.12);
+                    // [r, g, b, opacity]
+                    if (rgbValues[3] == 1) {
+                        break;
+                    }
+                    for (int a = 0; a < 3; a ++) {
+                        // color * accumulated transparency * opacity
+                        colours[j][i][a] += (rgbValues[a] * colours[j][i][3] * rgbValues[3]);
+                    }
+                    // Set accumulated transparency.
+                    colours[j][i][3] *= (1 - rgbValues[3]);
+                }
+            }
+        }
+        setImageWriter(image_writer, h, w, colours);
+    }
+
+    // Volume rendering for top down.
+    public void TopRotate(WritableImage image, double angle) {
+        //Get image dimensions, and declare loop variables
+        int w=(int) image.getWidth(), h=(int) image.getHeight();
+        PixelWriter image_writer = image.getPixelWriter();
+
+        short datum;
+        Double[][][] colours = initializeColours(h, w);
+
+        short[][][] newData = rotateData(angle);
+
+        for (int k=0; k<CT_z_axis; k++){
+            for (int j=0; j<h; j++) {
+                for (int i=0; i<w; i++) {
+                    datum = newData[k][j][i];
+                    Double[] rgbValues = transferFunction(datum, 0.12);
+                    // [r, g, b, opacity]
+                    if (rgbValues[3] == 1) {
+                        break;
+                    }
+                    for (int a = 0; a < 3; a ++) {
+                        // color * accumulated transparency * opacity
+                        colours[j][i][a] += (rgbValues[a] * colours[j][i][3] * rgbValues[3]);
+                    }
+                    // Set accumulated transparency.
+                    colours[j][i][3] *= (1 - rgbValues[3]);
+                }
+            }
+        }
+        setImageWriter(image_writer, h, w, colours);
+    }
+
+    // Volume rendering for left right.
+    public void SideRotate(WritableImage image, double angle) {
+        //Get image dimensions, and declare loop variables
+        int w=(int) image.getWidth(), h=(int) image.getHeight();
+        PixelWriter image_writer = image.getPixelWriter();
+
+        short datum;
+        Double[][][] colours = initializeColours(h, w);
+
+        short[][][] newData = rotateData(angle);
+
+        for (int k=0; k<(CT_x_axis - 1) * 2; k++){
+            for (int j=0; j<h; j++) {
+                for (int i=0; i<w; i++) {
+                    datum = newData[j][i][k];
                     Double[] rgbValues = transferFunction(datum, 0.12);
                     // [r, g, b, opacity]
                     if (rgbValues[3] == 1) {

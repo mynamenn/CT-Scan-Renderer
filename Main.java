@@ -1,8 +1,5 @@
 import java.io.FileInputStream; 
-import java.io.FileNotFoundException; 
 import javafx.application.Application;
-import javafx.beans.value.ChangeListener; 
-import javafx.beans.value.ObservableValue; 
 import javafx.event.ActionEvent;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
@@ -55,6 +52,12 @@ public class Main extends Application {
 		WritableImage frontExpandedImage = new WritableImage((Front_width-1)*2 + 1, Front_height);
 		ImageView FrontExpandedView = new ImageView(frontExpandedImage);
 
+		WritableImage sideExpandedImage = new WritableImage((Side_width-1)*2 + 1, Side_height);
+		ImageView SideExpandedView = new ImageView(sideExpandedImage);
+
+		WritableImage topExpandedImage = new WritableImage((Top_width-1)*2 + 1, (Top_height-1)*2 + 1);
+		ImageView TopExpandedView = new ImageView(topExpandedImage);
+
 		Slider topSlider = new Slider(0, CT_z_axis-1, 0);
 		Slider frontSlider = new Slider(0, CT_y_axis-1, 0);
 		Slider sideSlider = new Slider(0, CT_x_axis-1, 0);
@@ -105,7 +108,7 @@ public class Main extends Application {
 		Button rotateBtn = new Button("rotate");
 		rotateBtn.setOnAction(
 				(ActionEvent e) -> {
-					renderRotate(frontExpandedImage, sideImage, topImage);
+					renderRotate(frontExpandedImage, sideExpandedImage, topExpandedImage);
 				}
 		);
 
@@ -117,7 +120,8 @@ public class Main extends Application {
 				TopView, topSlider,
 				FrontView, frontSlider,
 				SideView, sideSlider,
-				FrontExpandedView, angleSlider,
+				FrontExpandedView, SideExpandedView, TopExpandedView,
+				angleSlider,
 				opacityLabel, opacitySlider,
 				rotateBtn, gradientBtn, volumeBtn
 		);
@@ -139,6 +143,8 @@ public class Main extends Application {
 
 	public void renderRotate(WritableImage frontImage, WritableImage sideImage, WritableImage topImage) {
 		rotate.FrontRotate(frontImage, angle);
+		rotate.TopRotate(topImage, angle);
+		rotate.SideRotate(sideImage, angle);
 	}
 	
 	public void ReadData() throws IOException {

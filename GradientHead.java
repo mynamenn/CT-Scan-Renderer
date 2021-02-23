@@ -13,18 +13,12 @@ public class GradientHead extends Main {
         //Get image dimensions, and declare loop variables.
         int w=(int) image.getWidth(), h=(int) image.getHeight();
         PixelWriter image_writer = image.getPixelWriter();
+        int step = 2;
 
         // Left right, front back, up down.
         double[] lightPos = new double[]{255, 0, 100}; // Coordinates of light.
-        // Light is at top right shining north-west.
-        double x = CT_x_axis;
-        double y = 0.0; // Most front layer.
-        double z = 0.0; // At the top.
 
-        int step = 2;
-
-        int[][] arr = new int[h][w];
-        // Find all the k position where ray hits bone.
+        int[][] arr = new int[h][w]; // Array of positions of k where ray hits bone.
         for (int j = 0; j < h; j++) {
             for (int i = 0; i < w; i++) {
                 int k = 0;
@@ -55,7 +49,7 @@ public class GradientHead extends Main {
                 }
 
                 double[] lineVector = new double[]{step, k2-k, 0.0};
-                double[] lightVector = new double[]{lightPos[0] - i + 1, lightPos[1] - j + 1, lightPos[2] - arr[j][i]};
+                double[] lightVector = new double[]{lightPos[0] - i, lightPos[1] - j, lightPos[2] - arr[j][i]};
                 double lineLength = Math.sqrt(Math.pow(lineVector[0],2) + Math.pow(lineVector[1],2) + Math.pow(lineVector[2],2));
                 double lightLength = Math.sqrt(Math.pow(lightVector[0],2) + Math.pow(lightVector[1],2) + Math.pow(lightVector[2],2));
 
