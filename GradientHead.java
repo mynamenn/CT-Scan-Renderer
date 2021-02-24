@@ -49,14 +49,16 @@ public class GradientHead extends Main {
                 }
 
                 double[] lineVector = new double[]{step, k2-k, 0.0};
+                double x = (k2-k)/step;
+                double[] normalVector = new double[]{x,-1 , 0.0};
                 double[] lightVector = new double[]{lightPos[0] - i, lightPos[1] - j, lightPos[2] - arr[j][i]};
-                double lineLength = Math.sqrt(Math.pow(lineVector[0],2) + Math.pow(lineVector[1],2) + Math.pow(lineVector[2],2));
+                double lineLength = Math.sqrt(Math.pow(normalVector[0],2) + Math.pow(normalVector[1],2) + Math.pow(normalVector[2],2));
                 double lightLength = Math.sqrt(Math.pow(lightVector[0],2) + Math.pow(lightVector[1],2) + Math.pow(lightVector[2],2));
 
                 double cosTheta = 0.0;
                 // Dot product of light and normal vector.
                 for (int index = 0; index < 3; index++) {
-                    cosTheta += lightVector[index] * lineVector[index] / (lightLength * lineLength);
+                    cosTheta += lightVector[index] * normalVector[index] / (lightLength * lineLength);
                 }
                 // Light is at the back, thus pixel can't be seen.
                 if (cosTheta < 0) {
