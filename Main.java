@@ -133,6 +133,8 @@ public class Main extends Application {
 
 	public void renderGradients(WritableImage frontImage, WritableImage sideImage, WritableImage topImage) {
 		gradient.FrontGradient(frontImage);
+		gradient.SideGradient(sideImage);
+		gradient.TopGradient(topImage);
 	}
 
 	public void renderVolumes(WritableImage frontImage, WritableImage sideImage, WritableImage topImage) {
